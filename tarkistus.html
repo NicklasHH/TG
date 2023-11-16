@@ -87,6 +87,7 @@
   }
 
   function haeTiedot() {
+    let base64Credentials = btoa(`$admin:admin`);
     lippuId = document.getElementById("lipunID").value;
     url = `https://ticketguru-ohjelmistoprojekti.rahtiapp.fi/api/tickets/${lippuId}`;
     fetch(url, {
