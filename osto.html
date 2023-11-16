@@ -155,7 +155,6 @@
       });
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
     // eventit
     fetch(eventsUrl, {
       method: "GET",
@@ -284,6 +283,5 @@
             "Lippuja jäljellä: " + (selectedTicketCount - numberOfTickets);
         })
         .catch((error) => console.error("Virhe: ", error));
-    }
-  });
+    };
 </script>
