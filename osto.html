@@ -19,22 +19,271 @@
       input {
         text-align: center;
       }
+      @media print {
+   body *, #main * { display:none; }
+   #main, #main #printarea, #main #printarea *, #qr-koodi { display:block; }
+}
     </style>
   </head>
   <body class="text-center">
-    <h1>Etusivu</h1>
+    <div id="main">
+    <h1>Lipun osto</h1>
+    <select id="event">
+      <option value="" disabled selected>Valitse tapahtuma</option></select
+    ><br /><br />
 
-    <form>
+    <select id="ticketType">
+      <option value="" disabled selected>Valitse lipputyyppi</option></select
+    ><br /><br />
 
+    <span id="ticketsLeft"> Lippuja jäljellä: </span>
+    <br /><br />
 
-    </form>
+    <span id="ticketPrice"> hinta: </span>
 
+    <br /><br />
+
+    <button id="myyLippu" type="button" onclick="getTransaction()">Myy lippu</button><br /><br />
+    <button id="tarkistaLippu" type="button" onclick="sellTicket()">Merkitse myydyksi</button>
+    <br /><br />
+    <div id="printarea">
+      <div id="qr-koodi"></div>
+    </div>
+    <button onclick="window.print();return false;" />Printtaa lippu</button>
+  </div>
   </body>
 </html>
 
 <script>
-  function ohjaaSivulle(sivu) {
-    window.location.href = sivu;
+  let selectedEventId;
+  let selectedTicketTypeId;
+  let selectedTicketTypePrice;
+  let transactionId;
+  let lipputiedot;
+  let selectedTicketCount;
+  let selectedEventId2 = selectedEventId;
+  let soldTicketId;
+
+  let base64Credentials = btoa(`admin:admin`);
+  let eventsUrl = `https://ticketguru-ohjelmistoprojekti.rahtiapp.fi/api/events`;
+  let transactionUrl = "https://ticketguru-ohjelmistoprojekti.rahtiapp.fi/api/transactions";
+  let ticketsUrl = "https://ticketguru-ohjelmistoprojekti.rahtiapp.fi/api/tickets";
+
+  function getTransaction() {
+    let tiedot = {
+      amount: selectedTicketTypePrice,
+      transactionOk: "false",
+    };
+    fetch(transactionUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${base64Credentials}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(tiedot),
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Virheellinen vastaus API:sta");
+        }
+        return response.json();
+      })
+      .then((data) => {
+        console.log(data.transactionId);
+        transactionId = data.transactionId;
+        console.log("transaktionid: " + transactionId);
+      })
+      .catch((error) => console.error("Virhe: ", error));
   }
 
+  function sellTicket() {
+    lippuTiedot = {
+      event: { eventId: selectedEventId },
+      ticketType: { ticketTypeId: selectedTicketTypeId },
+      transaction: { transactionId: transactionId },
+      isChecked: "false",
+    };
+    console.log(JSON.stringify(lippuTiedot));
+    fetch(ticketsUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${base64Credentials}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(lippuTiedot),
+    })
+      .then((response) => {
+        console.log(JSON.stringify(lippuTiedot));
+        if (!response.ok) {
+          throw new Error("Virheellinen vastaus API:sta");
+        }
+        return response.json();
+      })
+      .then((data) => {
+        console.log(data);
+        soldTicketId = data.ticketId;
+        showSoldTicket();
+      })
+
+      .catch((error) => console.error("Virhe: ", error));
+  }
+
+  function showSoldTicket() {
+    qrUrl = `https://ticketguru-ohjelmistoprojekti.rahtiapp.fi/api/tickets/qr/${soldTicketId}`;
+    fetch(qrUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Basic ${base64Credentials}`,
+      },
+    })
+      .then((response) => {
+        if (response.ok) {
+          return response.blob();
+        } else {
+          throw new Error("Virheellinen vastaus API:sta");
+        }
+      })
+      .then((data) => {
+        const imageUrl = URL.createObjectURL(data);
+        const imageElement = document.createElement("img");
+        imageElement.src = imageUrl;
+        const container = document.getElementById("qr-koodi");
+        container.replaceChildren(imageElement);
+      })
+      .catch((error) => {
+        console.error("Virhe:", error);
+      });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    // eventit
+    fetch(eventsUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Basic ${base64Credentials}`,
+      },
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Virheellinen vastaus API:sta");
+        }
+        return response.json();
+      })
+      .then((data) => {
+        const dropdown = document.getElementById("event");
+        data.forEach((item) => {
+          const option = document.createElement("option");
+          option.value = item.eventId;
+          option.text = item.eventName;
+          dropdown.add(option);
+        });
+        selectedEventId = dropdown.value;
+        dropdown.addEventListener("change", function () {
+          selectedEventId = dropdown.value;
+
+          const found = data.find((item) => item.eventId == parseInt(selectedEventId));
+          selectedTicketCount = found.ticketCount;
+          getTicketTypes();
+          ticketsLeft();
+        });
+      })
+      .catch((error) => console.error("Virhe: ", error));
+
+    // tickettypes
+    function getTicketTypes() {
+      selectedEventId2 = selectedEventId;
+      let ticketTypeUrl = `https://ticketguru-ohjelmistoprojekti.rahtiapp.fi/api/tickettypes`;
+      fetch(ticketTypeUrl, {
+        method: "GET",
+        headers: {
+          Authorization: `Basic ${base64Credentials}`,
+        },
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Virheellinen vastaus API:sta");
+          }
+          return response.json();
+        })
+        .then((data) => {
+          const dropdown = document.getElementById("ticketType");
+          dropdown.innerHTML = "";
+
+          const defaultOption = document.createElement("option");
+          defaultOption.value = "";
+          defaultOption.text = "Valitse lipputyyppi";
+          defaultOption.disabled = true;
+          defaultOption.selected = true;
+
+          dropdown.add(defaultOption);
+
+          data.forEach((item) => {
+            if (selectedEventId == item.event.eventId) {
+              const option = document.createElement("option");
+              option.value = item.ticketTypeId;
+              option.text = item.ticketType;
+              dropdown.add(option);
+            }
+          });
+
+          dropdown.addEventListener("change", function () {
+            selectedEventId2 = dropdown.value;
+            getTicketPrice();
+          });
+        })
+
+        .catch((error) => console.error("Virhe: ", error));
+    }
+
+    function getTicketPrice() {
+      let ticketTypeUrlId = `https://ticketguru-ohjelmistoprojekti.rahtiapp.fi/api/tickettypes/${selectedEventId2}`;
+      fetch(ticketTypeUrlId, {
+        method: "GET",
+        headers: {
+          Authorization: `Basic ${base64Credentials}`,
+        },
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Virheellinen vastaus API:sta");
+          }
+          return response.json();
+        })
+        .then((data) => {
+          const priceSpan = document.getElementById("ticketPrice");
+          priceSpan.textContent = "Hinta: " + data.price + "€";
+          selectedTicketTypeId = data.ticketTypeId;
+          selectedTicketTypePrice = data.price;
+        })
+        .catch((error) => console.error("Virhe: ", error));
+    }
+
+    function ticketsLeft() {
+      fetch(ticketsUrl, {
+        method: "GET",
+        headers: {
+          Authorization: `Basic ${base64Credentials}`,
+        },
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Virheellinen vastaus API:sta");
+          }
+          return response.json();
+        })
+        .then((data) => {
+          const ticketsForEvent = data
+            .filter((item) => item.event.eventId == selectedEventId)
+            .map((item) => item.ticketId);
+
+          const numberOfTickets = ticketsForEvent.length;
+          console.log("Lippujen määrä:", numberOfTickets);
+
+          const ticketsLeftSpan = document.getElementById("ticketsLeft");
+          ticketsLeftSpan.textContent =
+            "Lippuja jäljellä: " + (selectedTicketCount - numberOfTickets);
+        })
+        .catch((error) => console.error("Virhe: ", error));
+    }
+  });
 </script>
